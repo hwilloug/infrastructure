@@ -35,6 +35,29 @@ resource "aws_acm_certificate" "acm_certificate" {
   validation_method = "DNS"
 }
 
+
+resource "aws_route53_record" "dns_validation_records" {
+  for_each = {
+    for dvo in aws_acm_certificate.acm_certificate.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = var.route53_zone_id
+}
+
+resource "aws_acm_certificate_validation" "certificate_validation" {
+  certificate_arn         = aws_acm_certificate.acm_certificate.arn
+  validation_record_fqdns = [for record in aws_route53_record.dns_validation_records : record.fqdn]
+}
+
 resource "aws_cloudfront_distribution" "cloudfront_distribution" {
   origin {
     domain_name              = aws_s3_bucket.s3_bucket.bucket_regional_domain_name
@@ -51,6 +74,14 @@ resource "aws_cloudfront_distribution" "cloudfront_distribution" {
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = local.origin_access_control_name
+
+    forwarded_values {
+      query_string = true
+
+      cookies {
+        forward = "none"
+      }
+    }
 
     viewer_protocol_policy = "redirect-to-https"
     min_ttl                = 0
@@ -70,6 +101,8 @@ resource "aws_cloudfront_distribution" "cloudfront_distribution" {
   }
 
   tags = var.tags
+
+  depends_on = [aws_acm_certificate_validation.certificate_validation]
 }
 
 data "aws_iam_policy_document" "s3_cloudfront_policy" {
@@ -77,8 +110,13 @@ data "aws_iam_policy_document" "s3_cloudfront_policy" {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.s3_bucket.arn}/*"]
     principals {
-      type        = "AWS"
-      identifiers = ["arn:aws:iam::cloudfront:132507767948:distribution/${aws_cloudfront_distribution.cloudfront_distribution.id}"]
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.cloudfront_distribution.arn]
     }
   }
 }
