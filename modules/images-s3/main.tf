@@ -146,9 +146,10 @@ resource "aws_cloudfront_distribution" "cloudfront_distribution" {
     }
 
     viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 3600
-    max_ttl                = 86400
+    min_ttl                = 3600
+    default_ttl            = 86400
+    max_ttl                = 31536000
+
     lambda_function_association {
       event_type   = "origin-request"
       lambda_arn   = aws_lambda_function.image_processor.qualified_arn
