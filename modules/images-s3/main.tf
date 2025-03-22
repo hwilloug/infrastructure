@@ -50,6 +50,8 @@ resource "aws_lambda_function" "image_processor" {
   runtime         = "nodejs18.x"
   filename        = data.archive_file.image_processor.output_path
   source_code_hash = data.archive_file.image_processor.output_base64sha256
+  memory_size     = 1024
+  timeout         = 30
   publish         = true
 }
 

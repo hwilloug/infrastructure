@@ -14,6 +14,7 @@ exports.handler = async (event) => {
   let width = null;
   let height = null;
   let quality = 80; // default quality if not provided
+  let format = 'jpeg';
 
   if (querystring) {
     // querystring comes as a string like "w=800&h=600&q=80"
@@ -26,6 +27,9 @@ exports.handler = async (event) => {
     }
     if (params.has('q')) {
       quality = parseInt(params.get('q'), 10);
+    }
+    if (params.has('f')) {
+      format = params.get('f');
     }
   }
 
@@ -43,24 +47,35 @@ exports.handler = async (event) => {
     if (width || height) {
       image = image.resize(width, height);
     }
-
-    const processedImageBuffer = await image
-      .jpeg({ quality: quality })
-      .toBuffer();
-
-    return {
-      status: '200',
-      statusDescription: 'OK',
-      headers: {
-        'content-type': [{
-          key: 'Content-Type',
-          value: 'image/jpeg'
-        }]
-      },
-      body: processedImageBuffer.toString('base64'),
-      bodyEncoding: 'base64'
-    };
-
+    try {
+      let processedImageBuffer;
+      if (format === "jpeg" || format === "jpg") {
+        const qualityNum = parseInt(quality, 10);
+        if (isNaN(qualityNum) || qualityNum < 1 || qualityNum > 100) {
+          throw new Error('Quality must be a number between 1 and 100');
+        }
+        processedImageBuffer = await image.jpeg({ quality: qualityNum }).toBuffer();
+      } else if (format === "png") {
+        processedImageBuffer = await image.png().toBuffer();
+      } else {
+        processedImageBuffer = await image.toBuffer();
+      }
+      return {
+        status: '200',
+        statusDescription: 'OK',
+        headers: {
+          'content-type': [{
+            key: 'Content-Type',
+            value: `image/${format}`
+          }]
+        },
+        body: processedImageBuffer.toString('base64'),
+        bodyEncoding: 'base64'
+      };
+    } catch (err) {
+      console.error("Error during image processing:", err);
+      throw err;
+    }
   } catch (error) {
     console.error("Error processing image:", error);
     // If an error occurs, return a 500 response.
